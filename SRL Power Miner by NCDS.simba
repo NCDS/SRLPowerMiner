@@ -91,6 +91,35 @@ begin
   end;
 end;
 
+procedure update;
+var
+  fileStream: integer;
+  masterVersion, localVersion, newFile, newFile_path: string;
+begin
+  writeln('[script] Checking version...');
+  masterVersion := getPage('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/Version.txt');
+  writeln('masterVersion: '+toStr(masterVersion)+';';
+  writeln('localVersion: '+toStr(localVersion)+';');
+  if trim(masterVersion) > localVersion then
+  begin
+    writeln('Updating local version...');
+    newFile := getPage('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/SRL%20Power%20Miner%20by%20NCDS.simba');
+    newFile_path := scriptPath+'SRLPowerMiner v'+masterVersion+' by NCDS.simba';
+    fileStream := rewriteFile(newFile_path, true);
+    try
+      writeFileString(fileStream, newFile);
+    except
+      writeln('Failed to update local version.');
+      writeln('You may update manually at: https://github.com/NCDS/SRLPowerMiner');
+      terminateScript();
+    end;
+    closeFile(fileStream);
+    writeln('Update succesful!')
+    writeln('New script found at '+newFile_path);
+  end else
+  writeln('Local version matches master, no updates available.');
+end;
+
 function findNormalRandoms(): boolean; //result not used?
 begin
   mainScreen.setAngle(MS_ANGLE_HIGH); // Angle keeps ending up lower for some reason, so added this call
