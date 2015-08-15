@@ -1,4 +1,4 @@
-program SRL_AIO_PowerMiner_by_NCDS;
+program SRLPowerMiner_by_NCDS;
 {$DEFINE SMART}
 {$I SRL-6/SRL.Simba}
 {$i srl-6/lib/misc/srlplayerform.simba}
@@ -98,7 +98,7 @@ var
 begin
   writeln('[script] Checking version...');
   masterVersion := getPage('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/Version.txt');
-  writeln('masterVersion: '+toStr(masterVersion)+';';
+  writeln('masterVersion: '+toStr(masterVersion)+';');
   writeln('localVersion: '+toStr(localVersion)+';');
   if trim(masterVersion) > localVersion then
   begin
@@ -114,8 +114,9 @@ begin
       terminateScript();
     end;
     closeFile(fileStream);
-    writeln('Update succesful!')
-    writeln('New script found at '+newFile_path);
+    writeln('Update succesful!');
+    writeln('New script found at '+newFile_path+'');
+    terminateScript();
   end else
   writeln('Local version matches master, no updates available.');
 end;
@@ -210,7 +211,7 @@ end;
 
 procedure initDTM;
 begin
-    oreDTM := DTMFromString('mbQAAAHicY2VgYIhmYmDIAOJQIPYC4kQgDmNkYPADYncgjgPieCDW0JADqmZCwZIMmIARCwYDAFPwBBQ=');//('mlwAAAHicY2dgYLjIxMBwCohvA/F1KPsAED8E4vOMDAx3gfgGEB8G4iNAfB2ITwOxhoYcUDdQEQMjlGaC8zmhoqRiKAAAoL4MEA==');
+    oreDTM := DTMFromString('mbQAAAHicY2VgYIhmYmDIAOJQIPYC4kQgDmNkYPADYncgjgPieCDW0JADqmZCwZIMmIARCwYDAFPwBBQ=');
 end;
 
 procedure n_freeDTM;
@@ -284,6 +285,7 @@ end;
 function initScript(): boolean;
 begin
   clearDebug();
+  update;
   print('initScript()', TDebug.HEADER);
   initPlayerForm();
   runPlayerForm();
@@ -415,18 +417,6 @@ begin
       print('mainLoop(): '+toStr(result), TDebug.FOOTER);
       exit(false);
     end;
-  {if antiban() then
-    if drop() then
-    begin //Causes unnecesarry wait after dropping
-      if tabBackpack.waitForShift(_waitTime+random(round(_waitTime*0.25)))then //Adds random 25% to wait time
-        inc(players[currentPlayer].integers[_count]);
-      printProgress;
-    end else
-    begin
-      print('Failed while dropping ore', TDebug.WARNING);
-      print('mainLoop(): '+toStr(result), TDebug.FOOTER);
-      exit(false);
-    end;}
   result := true;
   print('mainLoop(): '+toStr(result), TDebug.FOOTER);
 end;
