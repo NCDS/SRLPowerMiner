@@ -1,0 +1,433 @@
+program SRL_AIO_PowerMiner_by_NCDS;
+{$DEFINE SMART}
+{$I SRL-6/SRL.Simba}
+{$i srl-6/lib/misc/srlplayerform.simba}
+{$DEFINE DEBUG}
+
+const
+  // Version #
+  scriptVersion = 0.1;
+
+  // Object constants
+  _minColorCount = 5;
+  _objWidth = 15;
+  _objHeight = 15;
+
+  // Integer player constants
+  _count = 0;
+  _direction = 1;
+  _oreExp = 2;
+  _breakIn = 3;
+  _breakFor = 4;
+
+  // String player constants
+  _reason = 0;
+  _ore = 1;
+  _oreTxt = 2;
+  _quickKey = 3;
+
+
+var
+  //colArray: T2DColorData; // not used?
+  oreDTM, _waitTime: integer;
+  takeBreaks, switchWorlds, debug: boolean;
+  data: T2DColorData;
+
+procedure declarePlayers();
+var
+  i, dir, l: integer;
+begin
+  players.setup(playerForm.playerNames, playerForm.playerFile);
+  currentPlayer := 0;
+
+  //Setup player attributes
+  for i := 0 to high(players) do
+    with players[i] do
+    begin
+      integers[_breakIn] := strToInt(playerForm.players[i].settings[1]);  //minutes until break
+      integers[_breakFor] := strToInt(playerForm.players[i].settings[2]);  //minutes to break
+      integers[_count] := 0;
+      strings[_reason] := 'Unknown';
+
+      for dir := 0 to high(playerForm.comboBoxItems[1]) do
+        if (playerForm.players[i].settings[9] = playerForm.comboBoxItems[1][dir]) then
+          integers[_direction] := dir*90;
+
+      world :=  strToInt(playerForm.players[i].settings[3]);
+
+      takeBreaks := strToBool(playerForm.players[i].settings[4]);
+      switchWorlds := strToBool(playerForm.players[i].settings[5]);
+      FindMod := strToBool(playerForm.players[i].settings[6]);
+      debug := strToBool(playerForm.players[i].settings[7]);
+
+      //incase user forgets to set quick key, set it to 1 by default
+      if playerForm.players[i].settings[0] = '0' then
+         playerForm.players[i].settings[0] := '1';
+
+      strings[_quickKey] := playerForm.players[i].settings[0];
+      strings[_ore] := playerForm.players[i].settings[8];
+    end;
+end;
+
+procedure initPlayerForm();
+begin
+  with playerForm do
+  begin
+    name := 'SRL Power Miner v'+toStr(scriptVersion)+' by NCDS';
+    scriptHelpThread := '';
+    scriptSettingsPath := '';
+
+    editBoxLabels := ['QuickKey', 'Minutes until Break', '# of Minutes to Break', 'World'];
+    editBoxDefaults := [ '0', '60', '15','0'];
+    checkBoxLabels := ['Take Breaks', 'Switch Worlds (After Break)', 'Logout if Mod is near', 'Debug'];
+    checkBoxDefaults := ['True','True','True', 'False'];
+
+    comboBoxLabels := ['OreType','MMDirection'];
+    comboBoxDefaults := ['Iron','North'];
+
+    setLength(comboBoxItems, length(comboBoxLabels));
+    comboBoxItems[0] := ['Tin', 'Copper', 'Iron', 'Coal'];
+    comboBoxItems[1] := ['North', 'East', 'South', 'West'];
+  end;
+end;
+
+function findNormalRandoms(): boolean; //result not used?
+begin
+  mainScreen.setAngle(MS_ANGLE_HIGH); // Angle keeps ending up lower for some reason, so added this call
+  result := claimTicket or exitTreasure;
+end;
+
+function getColorData(s: string): T2DColorData;
+begin
+  case lowercase(s) of
+    {'tin': begin
+
+           end;}
+
+    'copper': begin
+                players[currentPlayer].strings[_oreTxt] := 'opper ore';
+                players[currentPlayer].integers[_oreExp] := 0;
+                setLength(result, 2);
+                result[0].color := 7446732;
+                result[0].tolerance := 9;
+
+                result[1].color := 3369925;
+                result[1].tolerance := 12;
+              end;
+
+    'iron': begin
+              players[currentPlayer].strings[_oreTxt] := 'ron ore';
+              players[currentPlayer].integers[_oreExp] := 35;
+              setLength(result, 3);
+              result[0].color := 2899307; //light
+              result[0].tolerance := 7;
+
+              result[1].color := 2306133; //mid
+              result[1].tolerance := 7;
+
+              result[2].color := 1911369; //dark
+              result[2].tolerance := 8;
+            end;
+
+    'coal': begin
+              players[currentPlayer].strings[_oreTxt] := 'oal';
+              players[currentPlayer].integers[_oreExp] := 50;
+              setLength(result, 3);
+              result[0].color := 1447960; //Lighter color
+              result[0].tolerance := 4;
+
+              result[1].color := 1974304; //mid range color
+              result[1].tolerance := 4;
+
+              result[2].color := 1118739; //darkest
+              result[2].tolerance := 2;
+            end;
+  end;
+end;
+
+function T2DColorData.findColorSpiral(sBox: TBox): boolean;
+var
+  i, ii, l: integer;
+  cs: TColorSettings; //Place holder for now
+begin
+  print('findColorSpiral()', TDebug.HEADER);
+  result := false;
+  l := high(self);
+
+  for i := 0 to l do
+    if result then
+      break
+    else
+      result := mainScreen.findObject(mainScreen.cx, mainScreen.cy, [self[i].color],
+        [self[i].tolerance], cs, mainScreen.getCenterPoint,_objWidth, _objHeight,
+        _minColorCount, [players[currentPlayer].strings[_oreTxt]+' rock'], sBox, MOUSE_LEFT);
+  print('findColorSpiral(): '+toStr(result), TDebug.FOOTER);
+end;
+
+function antiban(): boolean;
+begin
+  result := true;//???
+  if random(20) > 2 then
+    exit;
+  print('antiban()', TDebug.HEADER);
+  case random(100) of
+    0..29: hoverRandomSkill();
+    30..39: boredHuman();
+    50..79: randomRClickItem();
+    80..89: sleepAndMoveMouse(1000+random(2000));
+  end;
+  print('antiban(): '+toStr(result), TDebug.FOOTER);
+end;
+
+procedure initDTM;
+begin
+    oreDTM := DTMFromString('mbQAAAHicY2VgYIhmYmDIAOJQIPYC4kQgDmNkYPADYncgjgPieCDW0JADqmZCwZIMmIARCwYDAFPwBBQ=');//('mlwAAAHicY2dgYLjIxMBwCohvA/F1KPsAED8E4vOMDAx3gfgGEB8G4iNAfB2ITwOxhoYcUDdQEQMjlGaC8zmhoqRiKAAAoL4MEA==');
+end;
+
+procedure n_freeDTM;
+begin
+  freeDTM(oreDTM);
+end;
+
+function getWaitTime(skill: integer):integer;
+var
+  lvl: integer;
+begin
+  print('getWaitTime()', TDebug.HEADER);
+  lvl := tabStats.getSkillLevel(skill);
+  if lvl < 1 then
+    lvl := 60; //If getSkillLevel fails set 6 second wait by default
+  result := round((100 div round(lvl*0.5))*2)*1000;
+  print('getWaitTime() = '+toStr(result), TDebug.FOOTER);
+end;
+
+procedure printProgress;
+var
+  i, l: integer;
+  active: boolean;
+begin
+  l := length(players)-1;
+  writeln('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$');
+  for i := 0 to l do
+  begin
+    active := players[i].isActive;
+    writeln('Player: '+players[i].nickname+';');
+    writeln('Active: '+toStr(active)+';');
+    if not active then
+      writeln('Reason: '+players[i].strings[_reason]+';');
+    writeln('Time worked: '+toStr(msToTime(players[i].worked.getTime(), TIME_ABBREV))+';');
+    writeln('Ore: '+players[i].strings[_ore]+';');
+    writeln('Ore mined: '+toStr(players[i].integers[_count])+';');
+    writeln('Experience gained: '+toStr(players[i].integers[_count]*players[i].integers[_oreExp])+';');
+    if (l > 0) and (i < l) then
+      writeln('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
+  end;
+  writeln('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$');
+end;
+
+procedure initTerminate;
+begin
+  addOnTerminate('printProgress');
+  addOnTerminate('n_freeDTM');
+end;
+
+function initPlayer(): boolean;
+begin
+  print('initPlayer()', TDebug.HEADER);
+  wait(2000+random(200)); //lag :/
+  closePopup();
+  data := getColorData(players[currentPlayer].strings[_ore]);
+  minimap.setAngle(players[currentPlayer].integers[_direction]);
+  mainScreen.setAngle(MS_ANGLE_HIGH);
+  _waitTime := getWaitTime(SKILL_MINING);
+  if tabBackpack.open() then
+    findNormalRandoms()
+  else
+  begin
+    print('Failed to open tabBackpack');
+    players[currentPlayer].strings[_reason] := 'Failed to open tabBackpack';
+    exit(false);
+  end;
+  result := true;
+  print('initPlayer() = '+toStr(result), TDebug.FOOTER);
+end;
+
+function initScript(): boolean;
+begin
+  clearDebug();
+  print('initScript()', TDebug.HEADER);
+  initPlayerForm();
+  runPlayerForm();
+
+  if (not playerForm.isScriptReady) then
+    terminateScript();
+
+  declarePlayers();
+  setupSRL();
+  initDTM;
+  initTerminate;
+
+  if not players[currentPlayer].login then
+  begin
+    print('initPlayer(): '+toStr(result), TDebug.FOOTER);
+    exit(false);
+  end;
+
+  {$IFDEF DEBUG}
+    writeln('Angle degrees: '+tostr(players[currentPlayer].integers[_direction]));
+  {$ENDIF}
+  result := initPlayer();
+  print('initPlayer(): '+toStr(result), TDebug.FOOTER);
+end;
+
+function takeBreak(): boolean;
+var
+  t, tt, h, m, s: integer;
+begin
+  print('takeBreak()', TDebug.HEADER);
+  print('Break time...');
+  t := round(getSystemTime() + players[currentPlayer].integers[_breakFor]*60000+(random(players[currentPlayer].integers[_breakFor]*60000)*0.15));
+  players[currentPlayer].logout();
+
+  while t > getSystemTime do
+  begin
+    tt := (t-getSystemTime);
+    status('Taking break: '+msToTime(tt, TIME_ABBREV));
+  end;
+  status('');
+  result := players[currentPlayer].login;
+  if not result then
+    players[currentPlayer].strings[_reason] := 'Failed to login from break.';
+  print('takeBreak(): '+toStr(result), TDebug.FOOTER);
+end;
+
+function drop(): boolean;
+var
+  time: integer;
+begin
+  result := random(4) < 2; // So we don't behave like a bot, more human-like
+  if result and tabBackpack.count() < 10 then
+    exit(true);
+
+  print('Drop()', TDebug.HEADER);
+
+  if not tabBackpack.open() then
+  begin
+    print('Failed to open tab.Backpack.', TDebug.WARNING);
+    players[currentPlayer].strings[_reason] := 'Failed to open tabBackpack';
+    exit(false);
+  end;
+
+  if tabBackpack.isEmpty() then  //Calls .Open()
+  begin
+    result := true;
+    print('Drop(): '+toStr(result), TDebug.FOOTER);
+    exit(true);
+  end;
+
+  findNormalRandoms();
+  time := getSystemTime + 30000;
+  while tabBackpack.countDTM(oreDTM) > 0 do
+  begin
+    if time < getSystemTime then
+    begin
+      result := false; //for debug purposes
+      print('Timed out while dropping Ore.', TDebug.WARNING);
+      print('Drop(): '+toStr(result), TDebug.FOOTER);
+      players[currentPlayer].strings[_reason] := 'Timed out while dropping ore';
+      //exit(false);
+    end;
+    sendKeys(players[currentPlayer].strings[_quickKey], 100+random(500), 100+random(500));
+  end;
+  result := true;
+  if not tabBackpack.isEmpty() then //incase quick key doesn't work for some reason
+  begin
+    tabBackpack.dropItems(); //bug?
+    result := not tabBackpack.isFull(); //tabBackpack.isEmpty()
+    if not result then
+    begin
+      print('Failed to drop Ore');
+      players[currentPlayer].strings[_reason] := 'Failed to drop Ore';
+      print('Drop(): '+toStr(result), TDebug.FOOTER);
+      exit(false);
+    end;
+  end;
+  print('Drop(): '+toStr(result), TDebug.FOOTER);
+end;
+
+function mainLoop(): boolean;
+var
+  i, ii, l, ll, iCount, timer: integer;
+begin
+  print('mainLoop()', TDebug.HEADER);
+  if not isLoggedIn then
+  begin
+    print('mainLoop(): '+toStr(result), TDebug.FOOTER);
+    players[currentPlayer].strings[_reason] := 'Not logged in';
+    exit(false);
+  end;
+
+  iCount := tabBackpack.count();
+  timer := getSystemTime+(_waitTime+random(round(_waitTime*0.25)));
+  if data.findColorSpiral(mainscreen.getBounds()) then
+    if drop() then //Should ALWAYS result true unless fatal error
+    begin
+      while timer > getSystemTime() do
+        if iCount <> tabBackpack.count() then
+        begin
+          inc(players[currentPlayer].integers[_count]); // not 100% accurate
+          break;
+        end else
+         antiban();
+      printProgress;
+    end else
+    begin
+      print('Failed while dropping ore', TDebug.WARNING);
+      print('mainLoop(): '+toStr(result), TDebug.FOOTER);
+      exit(false);
+    end;
+  {if antiban() then
+    if drop() then
+    begin //Causes unnecesarry wait after dropping
+      if tabBackpack.waitForShift(_waitTime+random(round(_waitTime*0.25)))then //Adds random 25% to wait time
+        inc(players[currentPlayer].integers[_count]);
+      printProgress;
+    end else
+    begin
+      print('Failed while dropping ore', TDebug.WARNING);
+      print('mainLoop(): '+toStr(result), TDebug.FOOTER);
+      exit(false);
+    end;}
+  result := true;
+  print('mainLoop(): '+toStr(result), TDebug.FOOTER);
+end;
+
+var
+  t, tries: integer;
+begin
+  if not initScript() then
+    terminateScript;
+
+  t := round(getSystemTime() + players[currentPlayer].integers[_breakIn]*60000+(random(players[currentPlayer].integers[_breakIn]*60000)*0.15));
+  while players.getActive() > 0 do
+  begin
+    while t > getSystemTime() do
+      if not mainLoop() then // add 3 minute timer incase something goes wrong
+      begin
+        players[currentPlayer].strings[_reason] := 'Failed to mine rock in 3 minutes';
+        if not players.next(false, true) then
+          print('No more active players. Terminating script.', TDebug.FATAL);
+      end;
+
+    if players.getActive > 1 then
+      players.next()
+    else
+      if not takeBreak then
+        print('No more active players. Terminating script.', TDebug.FATAL);
+
+    t := round(getSystemTime() + players[currentPlayer].integers[_breakIn]*60000+(random(players[currentPlayer].integers[_breakIn]*60000)*0.15));
+    if not initPlayer then
+      if not players.next(false, true) then
+        print('No more active players. Terminating script.', TDebug.FATAL);
+  end;
+end.
