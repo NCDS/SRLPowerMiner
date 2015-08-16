@@ -6,7 +6,7 @@ program SRLPowerMiner_by_NCDS;
 
 const
   // Version #
-  scriptVersion = 1.0;
+  scriptVersion = 0.1;
 
   // Object constants
   _minColorCount = 5;
@@ -97,9 +97,10 @@ var
   masterVersion, localVersion, newFile, newFile_path: string;
 begin
   writeln('[script] Checking version...');
+  localVersion := toStr(scriptVersion);
   masterVersion := getPage('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/Version.txt');
-  writeln('masterVersion: '+toStr(masterVersion)+';');
-  writeln('localVersion: '+toStr(localVersion)+';');
+  writeln('masterVersion: '+masterVersion+';');
+  writeln('localVersion: '+localVersion+';');
   if trim(masterVersion) > localVersion then
   begin
     writeln('Updating local version...');
