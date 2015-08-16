@@ -6,7 +6,7 @@ program SRLPowerMiner_by_NCDS;
 
 const
   // Version #
-  scriptVersion = 0.1;
+  scriptVersion = 1.0;
 
   // Object constants
   _minColorCount = 5;
