@@ -1,12 +1,14 @@
 program SRLPowerMiner_by_NCDS;
 {$DEFINE SMART}
+{$DEFINE DEBUG}
+{$loadlib prosocks}
 {$I SRL-6/SRL.Simba}
 {$i srl-6/lib/misc/srlplayerform.simba}
-{$DEFINE DEBUG}
+
 
 const
   // Version #
-  scriptVersion = 0.1;
+  scriptVersion = '1.0';
 
   // Object constants
   _minColorCount = 5;
@@ -28,7 +30,6 @@ const
 
 
 var
-  //colArray: T2DColorData; // not used?
   oreDTM, _waitTime: integer;
   takeBreaks, switchWorlds, debug: boolean;
   data: T2DColorData;
@@ -91,20 +92,44 @@ begin
   end;
 end;
 
+//credit to Brandon
+function getPageEx(URL: string): string;
+var
+  S: SSLSocket;
+  res: ProMemoryStruct;
+begin
+  Pro_InitSocket(S, nil, nil, nil, nil);
+  Pro_CreateSocket(S, '');
+  Pro_SetSSL(S, false, false, true);
+  Pro_SetURL(S, URL);
+  Pro_DoGetEx(S, res);
+  {$IFDEF LAPE}
+  SetLength(Result, res.size);
+  MemMove(res.memory^, Result[1], res.size);
+  {$ELSE}
+  Result := res.memory;
+  {$ENDIF}
+  try
+    Pro_FreeSocket(S);
+  except
+    WriteLn('Unable to Free ' + URL + ' ProSocks Error');
+  end;
+end;
+
 procedure update;
 var
   fileStream: integer;
   masterVersion, localVersion, newFile, newFile_path: string;
 begin
   writeln('[script] Checking version...');
-  localVersion := toStr(scriptVersion);
-  masterVersion := getPage('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/Version.txt');
+  localVersion := scriptVersion;
+  masterVersion := getPageEx('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/Version.txt');
   writeln('masterVersion: '+masterVersion+';');
   writeln('localVersion: '+localVersion+';');
   if trim(masterVersion) > localVersion then
   begin
     writeln('Updating local version...');
-    newFile := getPage('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/SRL%20Power%20Miner%20by%20NCDS.simba');
+    newFile := getPageEx('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/SRL%20Power%20Miner%20by%20NCDS.simba');
     newFile_path := scriptPath+'SRLPowerMiner v'+masterVersion+' by NCDS.simba';
     fileStream := rewriteFile(newFile_path, true);
     try
