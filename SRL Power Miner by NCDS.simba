@@ -8,7 +8,10 @@ program SRLPowerMiner_by_NCDS;
 
 const
   // Version #
-  scriptVersion = '1.0';
+  scriptVersion = '1.2';
+
+  // Globals
+  itemOutlineBlack = 65536;
 
   // Object constants
   _minColorCount = 5;
@@ -227,10 +230,10 @@ begin
     exit;
   print('antiban()', TDebug.HEADER);
   case random(100) of
-    0..29: hoverRandomSkill();
-    30..39: boredHuman();
-    50..79: randomRClickItem();
-    80..89: sleepAndMoveMouse(1000+random(2000));
+    0..19: hoverRandomSkill();
+    30..32: boredHuman();
+    50..69: randomRClickItem();
+    80..82: sleepAndMoveMouse(1000+random(2000));
   end;
   print('antiban(): '+toStr(result), TDebug.FOOTER);
 end;
@@ -274,7 +277,9 @@ begin
     writeln('Time worked: '+toStr(msToTime(players[i].worked.getTime(), TIME_ABBREV))+';');
     writeln('Ore: '+players[i].strings[_ore]+';');
     writeln('Ore mined: '+toStr(players[i].integers[_count])+';');
+    writeln('~ p/h: '+toStr(round(players[i].integers[_count]/(players[i].worked.getTime()/(60000*60))))+';');
     writeln('Experience gained: '+toStr(players[i].integers[_count]*players[i].integers[_oreExp])+';');
+    writeln('~ p/h: '+toStr(round((players[i].integers[_count]*players[i].integers[_oreExp])/(players[i].worked.getTime()/(60000*60))))+';');
     if (l > 0) and (i < l) then
       writeln('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
   end;
@@ -358,22 +363,27 @@ begin
   print('takeBreak(): '+toStr(result), TDebug.FOOTER);
 end;
 
+function getInvCount(): integer;
+var
+  slot: integer;
+begin
+  if not tabBackpack.open() then
+    writeln('Failed to open tabBackpack!');
+  result := 0;
+  for slot := 1 to 28 do
+    if isItemIn(tabBackpack.getSlotBox(slot)) then
+      incEx(result, 1);
+end;
+
 function drop(): boolean;
 var
   time: integer;
 begin
-  result := random(4) < 2; // So we don't behave like a bot, more human-like
-  if result and tabBackpack.count() < 10 then
+  result := random(5) < 3; // So we don't behave like a bot, more human-like
+  if result and getInvCount() < 2+random(3) then
     exit(true);
 
   print('Drop()', TDebug.HEADER);
-
-  if not tabBackpack.open() then
-  begin
-    print('Failed to open tab.Backpack.', TDebug.WARNING);
-    players[currentPlayer].strings[_reason] := 'Failed to open tabBackpack';
-    exit(false);
-  end;
 
   if tabBackpack.isEmpty() then  //Calls .Open()
   begin
@@ -382,7 +392,15 @@ begin
     exit(true);
   end;
 
-  findNormalRandoms();
+  {
+  if not tabBackpack.isOpen() then //Just to make sure, probably not necesarry
+  begin
+    print('Failed to open tab.Backpack.', TDebug.WARNING);
+    players[currentPlayer].strings[_reason] := 'Failed to open tabBackpack';
+    exit(false);
+  end;
+  }
+
   time := getSystemTime + 30000;
   while tabBackpack.countDTM(oreDTM) > 0 do
   begin
@@ -392,6 +410,7 @@ begin
       print('Timed out while dropping Ore.', TDebug.WARNING);
       print('Drop(): '+toStr(result), TDebug.FOOTER);
       players[currentPlayer].strings[_reason] := 'Timed out while dropping ore';
+      break;
       //exit(false);
     end;
     sendKeys(players[currentPlayer].strings[_quickKey], 100+random(500), 100+random(500));
@@ -399,8 +418,9 @@ begin
   result := true;
   if not tabBackpack.isEmpty() then //incase quick key doesn't work for some reason
   begin
+    findNormalRandoms();
     tabBackpack.dropItems(); //bug?
-    result := not tabBackpack.isFull(); //tabBackpack.isEmpty()
+    result := tabBackpack.isEmpty()
     if not result then
     begin
       print('Failed to drop Ore');
