@@ -1,17 +1,17 @@
 program SRLPowerMiner_by_NCDS;
 {$DEFINE SMART}
 {$DEFINE DEBUG}
+{$DEFINE AUTO_UPDATE}
 {$loadlib prosocks}
 {$I SRL-6/SRL.Simba}
 {$i srl-6/lib/misc/srlplayerform.simba}
 
-
 const
   // Version #
-  scriptVersion = '1.2';
+  scriptVersion = '1.4';
 
-  // Globals
-  itemOutlineBlack = 65536;
+  // User defined constants
+  untilAntiban = 5; //minimum minutes between anitban routines (plus random 50%)
 
   // Object constants
   _minColorCount = 5;
@@ -33,7 +33,7 @@ const
 
 
 var
-  oreDTM, _waitTime: integer;
+  oreDTM, _waitTime, _antibanTime: integer;
   takeBreaks, switchWorlds, debug: boolean;
   data: T2DColorData;
 
@@ -90,11 +90,12 @@ begin
     comboBoxDefaults := ['Iron','North'];
 
     setLength(comboBoxItems, length(comboBoxLabels));
-    comboBoxItems[0] := ['Tin', 'Copper', 'Iron', 'Coal'];
+    comboBoxItems[0] := ['Iron', 'Coal'];
     comboBoxItems[1] := ['North', 'East', 'South', 'West'];
   end;
 end;
 
+{$IFDEF AUTO_UPDATE}
 //credit to Brandon
 function getPageEx(URL: string): string;
 var
@@ -118,12 +119,14 @@ begin
     WriteLn('Unable to Free ' + URL + ' ProSocks Error');
   end;
 end;
+{$ENDIF}
 
 procedure update;
 var
   fileStream: integer;
   masterVersion, localVersion, newFile, newFile_path: string;
 begin
+  {$IFDEF AUTO_UPDATE}
   writeln('[script] Checking version...');
   localVersion := scriptVersion;
   masterVersion := getPageEx('https://raw.githubusercontent.com/NCDS/SRLPowerMiner/master/Version.txt');
@@ -148,6 +151,7 @@ begin
     terminateScript();
   end else
   writeln('Local version matches master, no updates available.');
+  {$ENDIF}
 end;
 
 function findNormalRandoms(): boolean; //result not used?
@@ -209,7 +213,7 @@ var
   i, ii, l: integer;
   cs: TColorSettings; //Place holder for now
 begin
-  print('findColorSpiral()', TDebug.HEADER);
+  {$IFDEF DEBUG}print('findColorSpiral()', TDebug.HEADER);{$ENDIF}
   result := false;
   l := high(self);
 
@@ -220,22 +224,23 @@ begin
       result := mainScreen.findObject(mainScreen.cx, mainScreen.cy, [self[i].color],
         [self[i].tolerance], cs, mainScreen.getCenterPoint,_objWidth, _objHeight,
         _minColorCount, [players[currentPlayer].strings[_oreTxt]+' rock'], sBox, MOUSE_LEFT);
-  print('findColorSpiral(): '+toStr(result), TDebug.FOOTER);
+  {$IFDEF DEBUG}print('findColorSpiral(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
 
 function antiban(): boolean;
 begin
   result := true;//???
-  if random(20) > 2 then
+  if _antibanTime > getSystemTime() and random(100) > 10 then
     exit;
-  print('antiban()', TDebug.HEADER);
-  case random(100) of
+  {$IFDEF DEBUG}print('antiban()', TDebug.HEADER);{$ENDIF}
+  _antibanTime := getSystemTime() + ((untilAntiban+random(round(untilAntiban*0.5)))*60000);
+  case random(40) of
     0..19: hoverRandomSkill();
-    30..32: boredHuman();
-    50..69: randomRClickItem();
-    80..82: sleepAndMoveMouse(1000+random(2000));
+    20..22: boredHuman();
+    23..35: randomRClickItem();
+    36..39: sleepAndMoveMouse(500+random(1000));
   end;
-  print('antiban(): '+toStr(result), TDebug.FOOTER);
+  {$IFDEF DEBUG}print('antiban(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
 
 procedure initDTM;
@@ -252,18 +257,19 @@ function getWaitTime(skill: integer):integer;
 var
   lvl: integer;
 begin
-  print('getWaitTime()', TDebug.HEADER);
+  {$IFDEF DEBUG}print('getWaitTime()', TDebug.HEADER);{$ENDIF}
   lvl := tabStats.getSkillLevel(skill);
   if lvl < 1 then
     lvl := 60; //If getSkillLevel fails set 6 second wait by default
   result := round((100 div round(lvl*0.5))*2)*1000;
-  print('getWaitTime() = '+toStr(result), TDebug.FOOTER);
+  {$IFDEF DEBUG}print('getWaitTime() = '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
 
 procedure printProgress;
 var
   i, l: integer;
   active: boolean;
+  hours: extended;
 begin
   l := length(players)-1;
   writeln('$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$');
@@ -277,9 +283,16 @@ begin
     writeln('Time worked: '+toStr(msToTime(players[i].worked.getTime(), TIME_ABBREV))+';');
     writeln('Ore: '+players[i].strings[_ore]+';');
     writeln('Ore mined: '+toStr(players[i].integers[_count])+';');
-    writeln('~ p/h: '+toStr(round(players[i].integers[_count]/(players[i].worked.getTime()/(60000*60))))+';');
+    hours := players[i].worked.getTime()/(60000*60);
+    if hours > 0 then
+      writeln('~ p/h: '+toStr(round(players[i].integers[_count]/hours))+';')
+    else
+      writeln('~ p/h: 0;');
     writeln('Experience gained: '+toStr(players[i].integers[_count]*players[i].integers[_oreExp])+';');
-    writeln('~ p/h: '+toStr(round((players[i].integers[_count]*players[i].integers[_oreExp])/(players[i].worked.getTime()/(60000*60))))+';');
+    if hours > 0 then
+      writeln('~ p/h: '+toStr(round((players[i].integers[_count]*players[i].integers[_oreExp])/hours))+';')
+    else
+      writeln('~ p/h: 0;');
     if (l > 0) and (i < l) then
       writeln('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~');
   end;
@@ -294,8 +307,9 @@ end;
 
 function initPlayer(): boolean;
 begin
-  print('initPlayer()', TDebug.HEADER);
+  {$IFDEF DEBUG}print('initPlayer()', TDebug.HEADER);{$ENDIF}
   wait(2000+random(200)); //lag :/
+  disableSRLDebug := not debug;
   closePopup();
   data := getColorData(players[currentPlayer].strings[_ore]);
   minimap.setAngle(players[currentPlayer].integers[_direction]);
@@ -305,19 +319,19 @@ begin
     findNormalRandoms()
   else
   begin
-    print('Failed to open tabBackpack');
+    {$IFDEF DEBUG}print('Failed to open tabBackpack');{$ENDIF}
     players[currentPlayer].strings[_reason] := 'Failed to open tabBackpack';
     exit(false);
   end;
   result := true;
-  print('initPlayer() = '+toStr(result), TDebug.FOOTER);
+  {$IFDEF DEBUG}print('initPlayer() = '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
 
 function initScript(): boolean;
 begin
   clearDebug();
   update;
-  print('initScript()', TDebug.HEADER);
+  {$IFDEF DEBUG}print('initScript()', TDebug.HEADER);{$ENDIF}
   initPlayerForm();
   runPlayerForm();
 
@@ -331,7 +345,7 @@ begin
 
   if not players[currentPlayer].login then
   begin
-    print('initPlayer(): '+toStr(result), TDebug.FOOTER);
+    {$IFDEF DEBUG}print('initPlayer(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
     exit(false);
   end;
 
@@ -339,14 +353,14 @@ begin
     writeln('Angle degrees: '+tostr(players[currentPlayer].integers[_direction]));
   {$ENDIF}
   result := initPlayer();
-  print('initPlayer(): '+toStr(result), TDebug.FOOTER);
+  {$IFDEF DEBUG}print('initPlayer(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
 
 function takeBreak(): boolean;
 var
   t, tt, h, m, s: integer;
 begin
-  print('takeBreak()', TDebug.HEADER);
+  {$IFDEF DEBUG}print('takeBreak()', TDebug.HEADER);{$ENDIF}
   print('Break time...');
   t := round(getSystemTime() + players[currentPlayer].integers[_breakFor]*60000+(random(players[currentPlayer].integers[_breakFor]*60000)*0.15));
   players[currentPlayer].logout();
@@ -360,19 +374,23 @@ begin
   result := players[currentPlayer].login;
   if not result then
     players[currentPlayer].strings[_reason] := 'Failed to login from break.';
-  print('takeBreak(): '+toStr(result), TDebug.FOOTER);
+  {$IFDEF DEBUG}print('takeBreak(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
 
-function getInvCount(): integer;
+function getInvCount(openTab: boolean = false): integer;
 var
   slot: integer;
 begin
-  if not tabBackpack.open() then
-    writeln('Failed to open tabBackpack!');
+  {$IFDEF DEBUG}print('getInvCount()', TDebug.HEADER);{$ENDIF}
+  result := -1;
+  if openTab then
+    if not tabBackpack.open() then
+      exit;
   result := 0;
   for slot := 1 to 28 do
     if isItemIn(tabBackpack.getSlotBox(slot)) then
       incEx(result, 1);
+  {$IFDEF DEBUG}print('getInvCount(): '+toStr(result)+';', TDebug.FOOTER);{$ENDIF}
 end;
 
 function drop(): boolean;
@@ -380,91 +398,72 @@ var
   time: integer;
 begin
   result := random(5) < 3; // So we don't behave like a bot, more human-like
-  if result and getInvCount() < 2+random(3) then
+  if result and getInvCount(true) < 2+random(3) then
     exit(true);
 
-  print('Drop()', TDebug.HEADER);
-
-  if tabBackpack.isEmpty() then  //Calls .Open()
-  begin
-    result := true;
-    print('Drop(): '+toStr(result), TDebug.FOOTER);
-    exit(true);
-  end;
-
-  {
-  if not tabBackpack.isOpen() then //Just to make sure, probably not necesarry
-  begin
-    print('Failed to open tab.Backpack.', TDebug.WARNING);
-    players[currentPlayer].strings[_reason] := 'Failed to open tabBackpack';
-    exit(false);
-  end;
-  }
-
+  {$IFDEF DEBUG}print('Drop()', TDebug.HEADER);{$ENDIF}
   time := getSystemTime + 30000;
-  while tabBackpack.countDTM(oreDTM) > 0 do
+  while (tabBackpack.countDTM(oreDTM) > 0) and (time > getSystemTime()) do
   begin
-    if time < getSystemTime then
-    begin
-      result := false; //for debug purposes
-      print('Timed out while dropping Ore.', TDebug.WARNING);
-      print('Drop(): '+toStr(result), TDebug.FOOTER);
-      players[currentPlayer].strings[_reason] := 'Timed out while dropping ore';
-      break;
-      //exit(false);
-    end;
     sendKeys(players[currentPlayer].strings[_quickKey], 100+random(500), 100+random(500));
+    wait(random(30));
   end;
   result := true;
   if not tabBackpack.isEmpty() then //incase quick key doesn't work for some reason
   begin
     findNormalRandoms();
     tabBackpack.dropItems(); //bug?
-    result := tabBackpack.isEmpty()
+    result := getInvCount() < 5; //sometimes we mine an ore here, so .isEmpty throw false positive
     if not result then
     begin
-      print('Failed to drop Ore');
+      {$IFDEF DEBUG}print('Failed to drop Ore');{$ENDIF}
       players[currentPlayer].strings[_reason] := 'Failed to drop Ore';
-      print('Drop(): '+toStr(result), TDebug.FOOTER);
+      {$IFDEF DEBUG}print('Drop(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
       exit(false);
     end;
   end;
-  print('Drop(): '+toStr(result), TDebug.FOOTER);
+  {$IFDEF DEBUG}print('Drop(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
 
 function mainLoop(): boolean;
 var
-  i, ii, l, ll, iCount, timer: integer;
+  i, ii, l, ll, iCount, timer, timeout: integer;
 begin
-  print('mainLoop()', TDebug.HEADER);
+  {$IFDEF DEBUG}print('mainLoop()', TDebug.HEADER);{$ENDIF}
   if not isLoggedIn then
   begin
-    print('mainLoop(): '+toStr(result), TDebug.FOOTER);
+    {$IFDEF DEBUG}print('mainLoop(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
     players[currentPlayer].strings[_reason] := 'Not logged in';
     exit(false);
   end;
 
-  iCount := tabBackpack.count();
-  timer := getSystemTime+(_waitTime+random(round(_waitTime*0.25)));
-  if data.findColorSpiral(mainscreen.getBounds()) then
-    if drop() then //Should ALWAYS result true unless fatal error
+  iCount := getInvCount();
+  timeout := getSystemTime() + (3*60000); //set 3 minute timer
+  while timeout > getSystemTime() do
+    if data.findColorSpiral(mainscreen.getBounds()) then
     begin
-      while timer > getSystemTime() do
-        if iCount <> tabBackpack.count() then
-        begin
-          inc(players[currentPlayer].integers[_count]); // not 100% accurate
-          break;
-        end else
-         antiban();
-      printProgress;
-    end else
-    begin
-      print('Failed while dropping ore', TDebug.WARNING);
-      print('mainLoop(): '+toStr(result), TDebug.FOOTER);
-      exit(false);
+      timer := getSystemTime+(_waitTime+random(round(_waitTime*0.25)));
+      if drop() then //Should ALWAYS result true unless fatal error
+      begin
+        minimap.waitFlag();
+        while timer > getSystemTime() do
+          if iCount <> getInvCount() then
+          begin
+            inc(players[currentPlayer].integers[_count]); // not 100% accurate
+            break;
+          end else
+           antiban();
+        printProgress;
+      end else
+      begin
+        {$IFDEF DEBUG}print('Failed while dropping ore', TDebug.WARNING);{$ENDIF}
+        {$IFDEF DEBUG}print('mainLoop(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
+        exit(false);
+      end;
+      result := true;
+      break;
     end;
-  result := true;
-  print('mainLoop(): '+toStr(result), TDebug.FOOTER);
+  {$IFDEF DEBUG}print('mainLoop(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
 
 var
@@ -473,11 +472,12 @@ begin
   if not initScript() then
     terminateScript;
 
+  _antibanTime := getSystemTime() + ((untilAntiban+random(round(untilAntiban*0.5)))*60000); // set minimum wait between antiban routines
   t := round(getSystemTime() + players[currentPlayer].integers[_breakIn]*60000+(random(players[currentPlayer].integers[_breakIn]*60000)*0.15));
   while players.getActive() > 0 do
   begin
     while t > getSystemTime() do
-      if not mainLoop() then // add 3 minute timer incase something goes wrong
+      if not mainLoop() then
       begin
         players[currentPlayer].strings[_reason] := 'Failed to mine rock in 3 minutes';
         if not players.next(false, true) then
