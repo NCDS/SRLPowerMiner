@@ -8,7 +8,7 @@ program SRLPowerMiner_by_NCDS;
 
 const
   // Version #
-  scriptVersion = '1.6';
+  scriptVersion = '1.8';
 
   // User defined constants
   untilAntiban = 5; //minimum minutes between anitban routines (plus random 50%)
@@ -486,7 +486,7 @@ begin
       begin
         minimap.waitFlag();
         while timer > getSystemTime() do
-          if iCount <> getInvCount() then
+          if (iCount <> getInvCount()) or isArrInStr(['spirit delivers'], chatBox.getTextOnLine(0)) then
           begin
             inc(players[currentPlayer].integers[_count]); // not 100% accurate
             break;
