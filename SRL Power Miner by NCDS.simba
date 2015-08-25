@@ -8,7 +8,7 @@ program SRLPowerMiner_by_NCDS;
 
 const
   // Version #
-  scriptVersion = '1.4';
+  scriptVersion = '1.6';
 
   // User defined constants
   untilAntiban = 5; //minimum minutes between anitban routines (plus random 50%)
@@ -393,6 +393,45 @@ begin
   {$IFDEF DEBUG}print('getInvCount(): '+toStr(result)+';', TDebug.FOOTER);{$ENDIF}
 end;
 
+function n_dropItems: boolean;
+var
+  i, amt, tmpTime: integer;
+  sBox: TBox;
+  pts: TPointArray;
+  point: TPoint;
+begin
+  {$IFDEF DEBUG}print('n_dropItems()', TDebug.HEADER);{$ENDIF}
+  amt := getInvCount();
+  for i := 1 to 28 do
+  begin
+    result := getInvCount = 0;
+    if result then
+      break;
+    sBox := tabBackpack.getSlotBox(i);
+    if isItemIn(sBox) then
+    begin
+      mouseBox(sBox, MOUSE_RIGHT);
+      if chooseOption.select(['Drop', 'drop', 'rop']) then
+        wait(randomRange(100, 350))
+      else
+      begin
+        mouseBox(sBox, MOUSE_RIGHT);
+        if chooseOption.select(['Destroy', 'estroy', 'estr', 'stro']) then
+          if waitColorCountRange(379903, 0, intToBox(110, 440, 475, 460), 5000, 304, 304) then
+          begin
+            findColorsTolerance(pts, 1137455, 360, 482, 445, 510, 12);
+            mouseBox(pts.getBounds, MOUSE_LEFT);
+            tmpTime := getSystemTime+15000;
+            while (amt = getInvCount) and (tmpTime > getSystemTime()) do
+              wait(30);
+          end;
+      end;
+    end;
+  end;
+  {$IFDEF DEBUG}print('n_dropItems(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
+end;
+
+
 function drop(): boolean;
 var
   time: integer;
@@ -412,7 +451,7 @@ begin
   if not tabBackpack.isEmpty() then //incase quick key doesn't work for some reason
   begin
     findNormalRandoms();
-    tabBackpack.dropItems(); //bug?
+    n_dropItems();
     result := getInvCount() < 5; //sometimes we mine an ore here, so .isEmpty throw false positive
     if not result then
     begin
