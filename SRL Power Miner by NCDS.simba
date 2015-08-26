@@ -8,7 +8,7 @@ program SRLPowerMiner_by_NCDS;
 
 const
   // Version #
-  scriptVersion = '1.8';
+  scriptVersion = '1.9';
 
   // User defined constants
   untilAntiban = 5; //minimum minutes between anitban routines (plus random 50%)
@@ -31,10 +31,21 @@ const
   _oreTxt = 2;
   _quickKey = 3;
 
+type
+  TMSObject = record
+    colors: array of Integer;
+    tolerance: array of Integer;
+    width: integer;
+    height: integer;
+    minCount: integer;
+    x, y: integer;
+    searchBox: TBox;
+  end;
 
 var
   oreDTM, _waitTime, _antibanTime: integer;
   takeBreaks, switchWorlds, debug: boolean;
+  objData: TMSObject;
   data: T2DColorData;
 
 procedure declarePlayers();
@@ -185,8 +196,8 @@ begin
               result[0].color := 2899307; //light
               result[0].tolerance := 7;
 
-              result[1].color := 2306133; //mid
-              result[1].tolerance := 7;
+              result[1].color := 2242428; //mid   2306133
+              result[1].tolerance := 8;
 
               result[2].color := 1911369; //dark
               result[2].tolerance := 8;
@@ -226,6 +237,37 @@ begin
         _minColorCount, [players[currentPlayer].strings[_oreTxt]+' rock'], sBox, MOUSE_LEFT);
   {$IFDEF DEBUG}print('findColorSpiral(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
+{
+function TMSObject.findColorsSpiral(): boolean;
+var
+  i, ii, l, ll: integer;
+  pts: TPointArray;
+  ptsArr: T2DPointArray;
+  box: TBox;
+begin
+  result := false;
+  l := high(self.colors);
+
+  for i := 0 to l do
+  begin
+    findColorsSpiralTolerance(self.x, self.y, pts, self.colors[i], self.searchBox, self.tolerance[i]);
+    if length(pts) < self.minCount then
+      continue;
+    ptsArr := clusterTPAEx(pts, self.width, self.height);
+    ll := high(ptsArr);
+    for ii := 0 to ll do
+    begin
+      if ii >= 5 then
+        break;
+      if length(ptsArr[ii]) < self.minCount then
+        continue;
+      box :=  ptsArr[ii].getBounds();
+      if (box.getWidth < self.width) or (box.getHeight < self.height) then
+        continue;
+      mouseBox(box, MOUSE_MOVE);
+
+
+end;}
 
 function antiban(): boolean;
 begin
@@ -338,6 +380,7 @@ begin
   if (not playerForm.isScriptReady) then
     terminateScript();
 
+  smartShowConsole := false;
   declarePlayers();
   setupSRL();
   initDTM;
