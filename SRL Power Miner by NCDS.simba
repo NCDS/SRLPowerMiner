@@ -8,7 +8,7 @@ program SRLPowerMiner_by_NCDS;
 
 const
   // Version #
-  scriptVersion = '1.9';
+  scriptVersion = '2.0';
 
   // User defined constants
   untilAntiban = 5; //minimum minutes between anitban routines (plus random 50%)
@@ -33,20 +33,101 @@ const
 
 type
   TMSObject = record
+    name: string;
     colors: array of Integer;
     tolerance: array of Integer;
-    width: integer;
-    height: integer;
+    minWidth, maxWidth: integer;
+    minHeight, maxHeight: integer;
     minCount: integer;
     x, y: integer;
     searchBox: TBox;
+    mouseText: TStringArray;
   end;
 
 var
   oreDTM, _waitTime, _antibanTime: integer;
   takeBreaks, switchWorlds, debug: boolean;
-  objData: TMSObject;
-  data: T2DColorData;
+  objData: array of TMSObject;
+
+procedure TMSObject.getObjectData(rock: string);
+begin
+  case lowercase(rock) of
+    'tin': begin
+             print('Tin is not yet supported, please mine something else for now.');
+             print('Sorry for the inconvenience.');
+             terminateScript; //make multiplayer
+           end;
+
+    'copper':  with self do
+               begin
+                 name := 'Copper';
+                 mouseText := ['opper ore ro'];
+                 searchBox := mainScreen.getBounds();
+                 minCount := 5;
+                 minWidth := 3;
+                 maxWidth := 10;
+                 minHeight := 4;
+                 maxHeight := 10;
+
+                 players[currentPlayer].integers[_oreExp] := 0;
+                 setLength(colors, 2);
+                 setLength(tolerance, 2);
+                 colors[0] := 7446732;
+                 tolerance[0] := 9;
+
+                 colors[1] := 3369925;
+                 tolerance[1] := 12;
+               end;
+
+    'iron':  with self do
+             begin
+               name := 'Iron';
+               mouseText := ['ron ore ro'];
+               searchBox := mainScreen.getBounds();
+               minCount := 5;
+               minWidth := 3;
+               maxWidth := 23;
+               minHeight := 5;
+               maxHeight := 45;
+
+               players[currentPlayer].integers[_oreExp] := 35;
+               setLength(colors, 2);
+               setLength(tolerance, 2);
+               colors[0] := 2899307; //light
+               tolerance[0] := 7;
+
+               colors[1] := 2242428; //mid   2306133
+               tolerance[1] := 8;
+
+              { colors[2] := 1911369; //dark
+               tolerance[2] := 8; }
+             end;
+
+    'coal':  with self do
+             begin
+               name := 'Coal';
+               mouseText := ['oal ro'];
+               searchBox := mainScreen.getBounds();
+               minCount := 5;
+               minWidth := 1;
+               maxWidth := 30;
+               minHeight := 1;
+               maxHeight := 30;
+
+               players[currentPlayer].integers[_oreExp] := 50;
+               setLength(colors, 3);
+               setLength(tolerance, 3);
+               colors[0] := 1447960; //Lighter color
+               tolerance[0] := 4;
+
+               colors[1] := 1974304; //mid range color
+               tolerance[1] := 4;
+
+               self.colors[2] := 1118739; //darkest
+               self.tolerance[2] := 2;
+             end;
+  end;
+end;
 
 procedure declarePlayers();
 var
@@ -54,9 +135,10 @@ var
 begin
   players.setup(playerForm.playerNames, playerForm.playerFile);
   currentPlayer := 0;
+  l := high(players);
 
   //Setup player attributes
-  for i := 0 to high(players) do
+  for i := 0 to l do
     with players[i] do
     begin
       integers[_breakIn] := strToInt(playerForm.players[i].settings[1]);  //minutes until break
@@ -101,7 +183,7 @@ begin
     comboBoxDefaults := ['Iron','North'];
 
     setLength(comboBoxItems, length(comboBoxLabels));
-    comboBoxItems[0] := ['Iron', 'Coal'];
+    comboBoxItems[0] := ['Tin', 'Copper', 'Iron', 'Coal'];
     comboBoxItems[1] := ['North', 'East', 'South', 'West'];
   end;
 end;
@@ -167,80 +249,12 @@ end;
 
 function findNormalRandoms(): boolean; //result not used?
 begin
-  mainScreen.setAngle(MS_ANGLE_HIGH); // Angle keeps ending up lower for some reason, so added this call
   result := claimTicket or exitTreasure;
 end;
 
-function getColorData(s: string): T2DColorData;
-begin
-  case lowercase(s) of
-    {'tin': begin
-
-           end;}
-
-    'copper': begin
-                players[currentPlayer].strings[_oreTxt] := 'opper ore';
-                players[currentPlayer].integers[_oreExp] := 0;
-                setLength(result, 2);
-                result[0].color := 7446732;
-                result[0].tolerance := 9;
-
-                result[1].color := 3369925;
-                result[1].tolerance := 12;
-              end;
-
-    'iron': begin
-              players[currentPlayer].strings[_oreTxt] := 'ron ore';
-              players[currentPlayer].integers[_oreExp] := 35;
-              setLength(result, 3);
-              result[0].color := 2899307; //light
-              result[0].tolerance := 7;
-
-              result[1].color := 2242428; //mid   2306133
-              result[1].tolerance := 8;
-
-              result[2].color := 1911369; //dark
-              result[2].tolerance := 8;
-            end;
-
-    'coal': begin
-              players[currentPlayer].strings[_oreTxt] := 'oal';
-              players[currentPlayer].integers[_oreExp] := 50;
-              setLength(result, 3);
-              result[0].color := 1447960; //Lighter color
-              result[0].tolerance := 4;
-
-              result[1].color := 1974304; //mid range color
-              result[1].tolerance := 4;
-
-              result[2].color := 1118739; //darkest
-              result[2].tolerance := 2;
-            end;
-  end;
-end;
-
-function T2DColorData.findColorSpiral(sBox: TBox): boolean;
-var
-  i, ii, l: integer;
-  cs: TColorSettings; //Place holder for now
-begin
-  {$IFDEF DEBUG}print('findColorSpiral()', TDebug.HEADER);{$ENDIF}
-  result := false;
-  l := high(self);
-
-  for i := 0 to l do
-    if result then
-      break
-    else
-      result := mainScreen.findObject(mainScreen.cx, mainScreen.cy, [self[i].color],
-        [self[i].tolerance], cs, mainScreen.getCenterPoint,_objWidth, _objHeight,
-        _minColorCount, [players[currentPlayer].strings[_oreTxt]+' rock'], sBox, MOUSE_LEFT);
-  {$IFDEF DEBUG}print('findColorSpiral(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
-end;
-{
 function TMSObject.findColorsSpiral(): boolean;
 var
-  i, ii, l, ll: integer;
+  i, ii, l, ll, len: integer;
   pts: TPointArray;
   ptsArr: T2DPointArray;
   box: TBox;
@@ -250,24 +264,40 @@ begin
 
   for i := 0 to l do
   begin
-    findColorsSpiralTolerance(self.x, self.y, pts, self.colors[i], self.searchBox, self.tolerance[i]);
+    findColorsSpiralTolerance(mainScreen.cx, mainScreen.cy, pts, self.colors[i], self.searchBox, self.tolerance[i]);
     if length(pts) < self.minCount then
+    begin
+      {$IFDEF DEBUG}print('Color: '+toStr(self.colors[i])+' returned less than '+toStr(self.minCount)+' results.');{$ENDIF}
       continue;
-    ptsArr := clusterTPAEx(pts, self.width, self.height);
+    end;
+    ptsArr := findGapsTPA(pts, 3);  //clusterTPAEx(pts, w, h);
+    ptsArr.sortFromFirstPoint(mainScreen.getCenterPoint());
     ll := high(ptsArr);
     for ii := 0 to ll do
     begin
-      if ii >= 5 then
+      if ii >= 5 then //Only check first five objects, then search again.
         break;
-      if length(ptsArr[ii]) < self.minCount then
+        len := length(ptsArr[ii]);
+      if not inRange(len, self.minCount, 20)then
         continue;
       box :=  ptsArr[ii].getBounds();
-      if (box.getWidth < self.width) or (box.getHeight < self.height) then
+      {$IFDEF DEBUG}
+        print('Length = '+toStr(length(ptsArr[ii]))+';');
+        print('Width = '+toStr(box.getWidth)+';');
+        print('Height = '+toStr(box.getHeight)+';');
+        //debugTPA(ptsArr[ii]);
+        //wait(4000);
+      {$ENDIF}
+      if (not inRange(box.getWidth, self.minWidth, self.maxWidth)) or (not inRange(box.getHeight, self.minHeight, self.maxHeight)) then
         continue;
       mouseBox(box, MOUSE_MOVE);
-
-
-end;}
+      if isMouseoverText(self.mouseText) then
+        result := didClick(true);
+      if result then
+        exit(true);
+    end;
+  end;
+end;
 
 function antiban(): boolean;
 begin
@@ -323,7 +353,7 @@ begin
     if not active then
       writeln('Reason: '+players[i].strings[_reason]+';');
     writeln('Time worked: '+toStr(msToTime(players[i].worked.getTime(), TIME_ABBREV))+';');
-    writeln('Ore: '+players[i].strings[_ore]+';');
+    writeln('Ore: '+objData[i].name+';');
     writeln('Ore mined: '+toStr(players[i].integers[_count])+';');
     hours := players[i].worked.getTime()/(60000*60);
     if hours > 0 then
@@ -353,9 +383,10 @@ begin
   wait(2000+random(200)); //lag :/
   disableSRLDebug := not debug;
   closePopup();
-  data := getColorData(players[currentPlayer].strings[_ore]);
-  minimap.setAngle(players[currentPlayer].integers[_direction]);
+  objData[currentPlayer].getObjectData(players[currentPlayer].strings[_ore]);
   mainScreen.setAngle(MS_ANGLE_HIGH);
+  minimap.setAngle(players[currentPlayer].integers[_direction]);
+  mainScreen.setZoom(true);
   _waitTime := getWaitTime(SKILL_MINING);
   if tabBackpack.open() then
     findNormalRandoms()
@@ -395,6 +426,7 @@ begin
   {$IFDEF DEBUG}
     writeln('Angle degrees: '+tostr(players[currentPlayer].integers[_direction]));
   {$ENDIF}
+  setLength(objData, length(players));
   result := initPlayer();
   {$IFDEF DEBUG}print('initPlayer(): '+toStr(result), TDebug.FOOTER);{$ENDIF}
 end;
@@ -510,6 +542,7 @@ end;
 function mainLoop(): boolean;
 var
   i, ii, l, ll, iCount, timer, timeout: integer;
+  str: string;
 begin
   {$IFDEF DEBUG}print('mainLoop()', TDebug.HEADER);{$ENDIF}
   if not isLoggedIn then
@@ -522,14 +555,15 @@ begin
   iCount := getInvCount();
   timeout := getSystemTime() + (3*60000); //set 3 minute timer
   while timeout > getSystemTime() do
-    if data.findColorSpiral(mainscreen.getBounds()) then
+    if objData[currentPlayer].findColorsSpiral() then
     begin
       timer := getSystemTime+(_waitTime+random(round(_waitTime*0.25)));
+      str := chatBox.getTextOnLine(0);
       if drop() then //Should ALWAYS result true unless fatal error
       begin
         minimap.waitFlag();
         while timer > getSystemTime() do
-          if (iCount <> getInvCount()) or isArrInStr(['spirit delivers'], chatBox.getTextOnLine(0)) then
+          if (iCount <> getInvCount()) or (not mainScreen.isPlayerAnimating(200)) or isArrInStr(['no ore', 'spirit delivers'], str) then
           begin
             inc(players[currentPlayer].integers[_count]); // not 100% accurate
             break;
